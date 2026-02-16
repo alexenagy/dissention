@@ -1,3 +1,5 @@
+#Why do I even need to predict the colexification?
+
 # Standard library
 import logging
 import os
@@ -21,7 +23,7 @@ app = typer.Typer()
 
 @app.command()
 def main():
-    model_path = MODELS_DIR / "word2vec.model"
+    model_path = MODELS_DIR / "word2vec_checkpoint_00031.model"
     model = Word2Vec.load(str(model_path))
 
     # Load all words from txt files using rglob
@@ -30,16 +32,15 @@ def main():
     
     txt_files = DATA_DIR.rglob("*.txt")
     
-    for file_path in txt_files:  # Changed 'f' to 'file_path'
-        with open(file_path, "r") as f:  # Now 'file_path' is correct
+    for file_path in txt_files: 
+        with open(file_path, "r") as f:  
             words_to_test = f.readlines()
             for word in words_to_test:
                 words_cleaned = word.replace("\n","")
                 if words_cleaned:
-                    # Categorize based on filename
-                    if "evidence" in file_path.name:  # Changed to 'file_path.name'
+                    if "evidence" in file_path.name:
                         evidence_words.append(words_cleaned)
-                    elif "intuition" in file_path.name:  # Changed to 'file_path.name'
+                    elif "intuition" in file_path.name:
                         intuition_words.append(words_cleaned)
 
     # Filter words that exist in the model's vocabulary

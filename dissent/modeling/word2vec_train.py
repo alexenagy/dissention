@@ -89,7 +89,7 @@ def main():
         # Initialize Word2Vec model with hyperparameters
         # vector_size=100: each word represented as 100-dimensional vector
         # window=5: considers 5 words before and after target word for context
-        # min_count=100: I FORGET WHICH DIRECTION THIS GOES IN
+        # min_count=10: 
         # workers=32: uses 32 CPU cores for training
         # sg=1: uses skip-gram algorithm (predicts context from word)
         model = Word2Vec(

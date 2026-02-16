@@ -10,13 +10,13 @@ from tqdm import tqdm
 from gensim.models import Word2Vec
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
+import plotly.express as px
 
 # Local application imports
 from dissent.config import FIGURES_DIR, PROCESSED_DATA_DIR, MODELS_DIR
 
 app = typer.Typer()
 
-'''
 def emi_over_time():
     df = pd.read_parquet(
         "/Users/alexnagy/Coding/dissention/processed_parquets_emi.parquet"
@@ -40,11 +40,10 @@ def emi_over_time():
         title="Mean EMI Over Time by Court Jurisdiction"
     )
     fig.show()
-'''
 
 @app.command()
 def main(): 
-    model = Word2Vec.load(str(MODELS_DIR / "word2vec_checkpoint_00031.model"))
+    model = MODELS_DIR / "word2vec.model"
 
     # ----- GLOBAL PCA -----
     all_words = model.wv.index_to_key
@@ -60,7 +59,7 @@ def main():
     })
 
     # ----- SEMANTIC CORNER -----
-    anchors = ["evidence"]
+    anchors = ["political", "judge", "court"]
     top_n = 30
 
     words_to_plot = set(anchors)
@@ -139,5 +138,4 @@ def main():
     fig.show()
 
 if __name__ == "__main__":
-    main()
-    #emi_over_time()
+    emi_over_time()

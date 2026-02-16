@@ -296,31 +296,26 @@ assess & opinion \\
 examine & consider \\
 fact & feel \\
 truth & intuition \\
-proof & \\
+proof & impression \\
 \midrule
 \multicolumn{2}{l}{\textit{Expanded terms:}} \\
-assessed & believing \\
-assessment & find \\
 appraise & belief \\
-evaluate & convinced \\
-examining & feel \\
-inquire & dissenting \\
-consider & considered \\
-analyze & considering \\
-determine & decide \\
+assessed & believing \\
+assessment & considered \\
+burden & considering \\
+evidence & constrained \\
+examining & convinced \\
+falsehood & decide \\
 look & discuss \\
-falsehood & examine \\
-untruth & determine \\
-truthfulness & inquire \\
-untrue & analyze \\
-prove & evaluate \\
-proving & felt \\
-evidence & think \\
-showing & feeling \\
-proved & sure \\
-proven & say \\
-show & constrained \\
-burden & believe \\
+prove & dissenting \\
+proved & feeling \\
+proven & felt \\
+proving & find \\
+show & say \\
+showing & sure \\
+truthfulness & think \\
+untrue & \\
+untruth & \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -329,7 +324,7 @@ The evidence-based dictionary expanded to include terms such as "assessed," "pro
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.8\textwidth]{/Users/alexnagy/Coding/dissention/reports/figures/newplot.png}
+\includegraphics[width=0.8\textwidth]{/Users/alexnagy/Coding/dissention/reports/figures/semantic_corner_plot.png}
 \caption{Semantic Space Around "Evidence"}
 \label{fig:evidence_semantic}
 \end{figure}
@@ -337,6 +332,8 @@ The evidence-based dictionary expanded to include terms such as "assessed," "pro
 Figure \ref{fig:evidence_semantic} visualizes the 30 words most semantically similar to "evidence" in the Word2Vec model, projected into two-dimensional space using Principal Component Analysis (PCA). The semantic cluster reveals that "evidence" associates primarily with technical legal terminology related to evidentiary procedures ("admissible," "testimony," "witness"), factual determination ("fact," "prove," "show"), and evidence quality ("probative," "credible," "corroborative"). The inset map (top right) situates this semantic cluster within the full embedding space of all words in the model, demonstrating that the model successfully captures the technical legal context in which evidence-based language appears in judicial opinions. This clustering pattern validates the model's ability to distinguish evidence-based reasoning from other forms of judicial discourse.
 
 ## Conclusion
+
+Synthetic controls results indicate no significant change in dissent following the partisan reform; however, extensive replication and robustness checks reveal substantial measurement and reproducibility challenges. These instabilities suggest that institutional heterogeneity across state courts undermines the credibility of causal inference based on dissent frequency alone, calling into question its use as a proxy for judicial independence in prior scholarship. Preliminary textual analyses indicate that examining the use of evidence- versus intuitionbased language in judicial opinions provides a more robust measure of judicial independence in opinion-writing across selection mechanisms. Overall, the study highlights the methodological limits of existing approaches and advances an alternative framework for assessing how state supreme court selection mechanisms shape judicial opinion-writing behavior.
 
 \newpage
 
