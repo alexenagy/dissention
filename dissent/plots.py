@@ -16,10 +16,35 @@ from dissent.config import FIGURES_DIR, PROCESSED_DATA_DIR, MODELS_DIR
 
 app = typer.Typer()
 
+'''
+def emi_over_time():
+    df = pd.read_parquet(
+        "/Users/alexnagy/Coding/dissention/processed_parquets_emi.parquet"
+    )
+
+    df_agg = (
+        df
+        .dropna(subset=["emi", "year", "court_jurisdiction"])
+        .groupby(
+            ["year", "court_jurisdiction"],
+            as_index=False
+        )["emi"]
+        .mean()
+    )
+
+    fig = px.line(
+        df_agg,
+        x="year",
+        y="emi",
+        color="court_jurisdiction",
+        title="Mean EMI Over Time by Court Jurisdiction"
+    )
+    fig.show()
+'''
 
 @app.command()
 def main(): 
-    model = MODELS_DIR / "word2vec.model"
+    model = Word2Vec.load(str(MODELS_DIR / "word2vec_checkpoint_00031.model"))
 
     # ----- GLOBAL PCA -----
     all_words = model.wv.index_to_key
@@ -35,7 +60,7 @@ def main():
     })
 
     # ----- SEMANTIC CORNER -----
-    anchors = ["political", "judge", "court"]
+    anchors = ["evidence"]
     top_n = 30
 
     words_to_plot = set(anchors)
@@ -114,4 +139,5 @@ def main():
     fig.show()
 
 if __name__ == "__main__":
-    app()
+    main()
+    #emi_over_time()

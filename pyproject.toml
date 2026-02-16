@@ -13,6 +13,7 @@ classifiers = ["Programming Language :: Python :: 3"]
 dependencies = [
   "datasets>=4.5.0",
   "gensim>=4.4.0",
+  "kaleido>=1.2.0",
   "loguru",
   "mkdocs",
   "nltk>=3.9.2",
