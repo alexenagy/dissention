@@ -9,43 +9,22 @@ from gensim.models import Word2Vec
 import numpy as np
 import pandas as pd
 from nltk.corpus import stopwords, words
-from nltk.tokenize import word_tokenize
-from nltk.stem import WordNetLemmatizer
 from sklearn.metrics.pairwise import cosine_similarity
 import pyarrow.parquet as pq
 import multiprocessing as mp
+import spacy
 
 # Local application imports
 from dissent.config import PROCESSED_DATA_DIR, INTERIM_DATA_DIR, MODELS_DIR
 
 app = typer.Typer()
 
-import nltk
-REQUIRED_RESOURCES = [
-    'stopwords', 
-    'words', 
-    'punkt', 
-    'wordnet', 
-    'omw-1.4',
-    'punkt_tab'
-]
-
-for resource in REQUIRED_RESOURCES:
-    try:
-        if resource == 'punkt' or resource == 'punkt_tab':
-            nltk.data.find(f'tokenizers/{resource}')
-        else:
-            nltk.data.find(f'corpora/{resource}')
-    except LookupError:
-        print(f"Downloading NLTK resource: {resource}")
-        nltk.download(resource)
-
 model_path = MODELS_DIR / "word2vec_checkpoint_00031.model"
 
-model = None 
+model = None
 politics_vectors = None
 evidence_vectors = None
-lemmatizer = None
+nlp = None
 stop_words = None
 english_words = None
 
@@ -54,13 +33,13 @@ def init_worker():
     """
     Runs once per CPU core to load heavy assets into RAM.
     """
-    global model, politics_vectors, evidence_vectors, lemmatizer, stop_words, english_words
-    
+    global model, politics_vectors, evidence_vectors, nlp, stop_words, english_words
+
     # 1. Load Model
     model = Word2Vec.load(str(model_path))
-    
+
     # 2. Pre-load NLP tools
-    lemmatizer = WordNetLemmatizer()
+    nlp = spacy.load("en_core_web_lg")
     stop_words = set(stopwords.words("english"))
     english_words = set(words.words())
 
@@ -88,14 +67,12 @@ def init_worker():
 # --- WORKER FUNCTIONS ---
 
 def preprocess_text(text):
-    """Tokenize, lowercase, remove stopwords, lemmatize, and filter English words."""
-    tokens = word_tokenize(text.lower())
+    """Tokenize, lowercase, remove stopwords, lemmatize with spaCy, and filter English words."""
+    doc = nlp(text)
     return [
-        lemma
-        for word in tokens
-        if word.isalpha() and word not in stop_words
-        for lemma in [lemmatizer.lemmatize(word)]
-        if lemma in english_words
+        token.lemma_.lower()
+        for token in doc
+        if token.is_alpha and token.text.lower() not in stop_words and token.lemma_.lower() in english_words
     ]
 
 
@@ -103,12 +80,12 @@ def calculate_distance(tokens, seed_vectors):
     """Mean cosine similarity between token vectors and seed vectors."""
     if not tokens or not seed_vectors:
         return None
-    
+
     seed_matrix = np.array(seed_vectors)
     token_vectors = [model.wv[t] for t in tokens if t in model.wv]
     if not token_vectors:
         return None
-    
+
     token_matrix = np.array(token_vectors)
     return np.mean(cosine_similarity(seed_matrix, token_matrix))
 
@@ -140,14 +117,14 @@ def process_batch(df_batch):
 def batch_inputs():
     input_file = PROCESSED_DATA_DIR / "dataset.parquet"
     parquet_file = pq.ParquetFile(input_file)
-    
-    batch_size = 100 
-    
+
+    batch_size = 100
+
     print(f"Streaming batches (size {batch_size})...", file=stdout)
-    
+
     batch_generator = (
         b.to_pandas() for b in parquet_file.iter_batches(
-            batch_size=batch_size, 
+            batch_size=batch_size,
             columns=["id", "opinions"]
         )
     )
@@ -157,8 +134,8 @@ def batch_inputs():
     with mp.Pool(processes=24, initializer=init_worker) as pool:
         processed_chunks = list(
             tqdm(
-                pool.imap_unordered(process_batch, batch_generator), 
-                total=total_expected, 
+                pool.imap_unordered(process_batch, batch_generator),
+                total=total_expected,
                 desc="Processing Opinions",
                 mininterval=10,
                 maxinterval=30,
@@ -171,7 +148,7 @@ def batch_inputs():
 
     print("Loading metadata (year and jurisdiction)...", file=stdout)
     metadata_df = pd.read_parquet(
-        input_file, 
+        input_file,
         columns=["id", "year", "court_jurisdiction"]
     )
 
@@ -181,13 +158,15 @@ def batch_inputs():
 
     output_path = PROCESSED_DATA_DIR / "processed_rhetoric_scores.parquet"
     final_df.to_parquet(output_path)
-    
+
     print(f"Success! Saved to {output_path}", file=stdout)
     print(final_df.head(), file=stdout)
+
 
 @app.command()
 def main():
     batch_inputs()
+
 
 if __name__ == "__main__":
     app()
