@@ -1,10 +1,10 @@
 ---
 title: The Impact of Judicial Selection Methods on Opinion Writing Behavior
 author: Alexandria Nagy
-bibliography: [./bib.bib]
+bibliography: [../references/bib.bib]
 fontsize: 12pt
 linestretch: 2
-csl: chicago-notes-bibliography-classic.csl
+csl: ../references/chicago-notes-bibliography-classic.csl
 header-includes:
   - \usepackage[margin=1in]{geometry}
   - \usepackage{caption}

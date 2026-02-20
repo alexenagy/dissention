@@ -21,8 +21,6 @@ def main():
     - court_id is NULL if unavailable
     - date_filed is NULL if unavailable
     """
-        # Filter by date
-    # df = pd.concat([pd.read_parquet(f) for f in tqdm(PROCESSED_DATA_DIR.rglob("part-*.parquet"))])
     
     parquets = [pd.read_parquet(f) for f in tqdm(PROCESSED_DATA_DIR.rglob("shard_*.parquet"))]
     df = pd.concat(parquets)
@@ -33,16 +31,7 @@ def main():
     df = df[df["year"] > 1897]
     df = df[df["year"] < 2026]
     df = df[df["court_type"] == "S"]
-    #df2 = df[
-    # df["court_jurisdiction"].isin(["North Carolina, NC"]) #can add more courts here with ,
-    #].copy()
-    print(df.head())
     df.to_parquet(PROCESSED_DATA_DIR / "dataset.parquet")
-
-#        opinions = row.get("opinions")
-#        if opinions is not None:   
-#            for o in opinions:
-#                opinion_text = o.get("opinion_text")
 
 if __name__ == "__main__":
     main()

@@ -13,37 +13,14 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # Local application imports
-from dissent.config import FIGURES_DIR, PROCESSED_DATA_DIR, MODELS_DIR
+from dissent.config import FIGURES_DIR, PROCESSED_DATA_DIR, MODELS_DIR, INTERIM_DATA_DIR
 
 app = typer.Typer()
 
-def emi_over_time():
-    df = pd.read_parquet(
-        "/Users/alexnagy/Coding/dissention/processed_parquets_emi.parquet"
-    )
-
-    df_agg = (
-        df
-        .dropna(subset=["emi", "year", "court_jurisdiction"])
-        .groupby(
-            ["year", "court_jurisdiction"],
-            as_index=False
-        )["emi"]
-        .mean()
-    )
-
-    fig = px.line(
-        df_agg,
-        x="year",
-        y="emi",
-        color="court_jurisdiction",
-        title="Mean EMI Over Time by Court Jurisdiction"
-    )
-    fig.show()
-
-@app.command()
-def main(): 
-    model = MODELS_DIR / "word2vec.model"
+def semantic_corner():
+    """Create semantic corner plot with global inset map."""
+    model_path = MODELS_DIR / "word2vec_checkpoint_00031.model"
+    model = Word2Vec.load(str(model_path))
 
     # ----- GLOBAL PCA -----
     all_words = model.wv.index_to_key
@@ -137,5 +114,114 @@ def main():
     fig.write_image("semantic_corner_plot.png", scale = 4)
     fig.show()
 
+@app.command()
+def main(): 
+    """Graph rhetoric scores over time by court, split by judicial selection method."""
+    SELECTION_CSV = INTERIM_DATA_DIR / "selection_mechanisms.csv"
+    
+    SELECTION_LABELS = {
+        "P": "Partisan Elections",
+        "N": "Nonpartisan Elections",
+        "A": "Appointment",
+    }
+    
+    def load_selection_methods() -> pd.DataFrame:
+        return pd.read_csv(SELECTION_CSV)
+    
+    def court_to_state_abbrev(court_jurisdiction: str) -> str | None:
+        """Extract state abbreviation from court_jurisdiction (e.g. 'North Carolina, NC' -> 'NC')."""
+        if pd.isna(court_jurisdiction):
+            return None
+        s = str(court_jurisdiction).strip()
+        if ", " in s:
+            return s.split(", ")[-1].strip()
+        return None
+    
+    # Load rhetoric scores
+    rhetoric_path = PROCESSED_DATA_DIR / "processed_rhetoric_score.parquet"
+    rhetoric = pd.read_parquet(rhetoric_path)
+    
+    # Clean and add court (state abbreviation)
+    rhetoric = rhetoric.dropna(subset=["rhetoric_score", "year", "court_jurisdiction"]).copy()
+    rhetoric["court"] = rhetoric["court_jurisdiction"].apply(court_to_state_abbrev)
+    rhetoric = rhetoric.dropna(subset=["court"])
+    rhetoric["year"] = rhetoric["year"].astype(int)
+    
+    # Load selection method per (year, court)
+    selection = load_selection_methods()
+    rhetoric = rhetoric.merge(
+        selection,
+        on=["year", "court"],
+        how="inner",
+    )
+    rhetoric = rhetoric[["year", "rhetoric_score", "selection_mechanism"]]
+    
+    # By (year, selection_mechanism): mean and 25th/75th percentiles of rhetoric scores
+    stats = (
+        rhetoric.groupby(["year", "selection_mechanism"])["rhetoric_score"]
+        .agg(
+            [
+                ("mean", "mean"),
+                ("p25", lambda x: x.quantile(0.25)),
+                ("p75", lambda x: x.quantile(0.75)),
+            ]
+        )
+        .reset_index()
+    )
+    
+    fig = go.Figure()
+    colors = {"P": "rgba(31, 119, 180, 0.3)", "N": "rgba(44, 160, 44, 0.3)", "A": "rgba(255, 127, 0, 0.3)"}
+    line_colors = {"P": "#1f77b4", "N": "#2ca02c", "A": "#ff7f0e"}
+    
+    for code in SELECTION_LABELS:
+        df = stats[stats["selection_mechanism"] == code].sort_values("year")
+        if df.empty:
+            continue
+        label = SELECTION_LABELS[code]
+        c = line_colors.get(code, "#888")
+        fill_c = colors.get(code, "rgba(128,128,128,0.2)")
+        # Shaded band (25th–75th percentile)
+        fig.add_trace(
+            go.Scatter(
+                x=df["year"].tolist() + df["year"].tolist()[::-1],
+                y=df["p75"].tolist() + df["p25"].tolist()[::-1],
+                fill="toself",
+                fillcolor=fill_c,
+                line=dict(width=0),
+                name=f"{label} (25th–75th %ile)",
+                legendgroup=label,
+                showlegend=True,
+            )
+        )
+        # Mean line
+        fig.add_trace(
+            go.Scatter(
+                x=df["year"],
+                y=df["mean"],
+                name=f"{label} (mean)",
+                line=dict(color=c, width=2),
+                legendgroup=label,
+            )
+        )
+    
+    fig.update_layout(
+        title="Rhetoric Scores Over Time by Selection Mechanism (Mean and 25th/75th Percentiles)",
+        xaxis_title="Year",
+        yaxis_title="Rhetoric Score",
+        hovermode="x unified",
+        width=650,
+        height=400,
+        font=dict(size=10),
+    )
+    
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    png_path = FIGURES_DIR / "rhetoric_scores_over_time_by_selection_mechanism.png"
+    html_path = FIGURES_DIR / "rhetoric_scores_over_time_by_selection_mechanism.html"
+    fig.write_image(png_path, scale=6, engine="kaleido")
+    fig.write_html(html_path)
+    print(f"Saved PNG: {png_path}")
+    print(f"Saved HTML: {html_path}")
+    fig.show()
+
 if __name__ == "__main__":
-    emi_over_time()
+    main()
