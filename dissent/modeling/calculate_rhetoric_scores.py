@@ -62,6 +62,8 @@ def init_worker():
     print(f"DEBUG: Loaded {len(evidence_vectors)} evidence vectors.")
     if len(politics_vectors) == 0:
         print("CRITICAL: No politics seed words were found in the Model Vocabulary!")
+    if len(evidence_vectors) == 0:
+        print("CRITICAL: No evidence seed words were found in the Model Vocabulary!")
 
 
 # --- WORKER FUNCTIONS ---
