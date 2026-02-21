@@ -1,18 +1,11 @@
-# For analyzing how similar evidence/political dictionaries are to one another
-
-# Standard library
 import logging
 import os
-
-# Third-party libraries
 import typer
 from gensim.models import Word2Vec
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
-# Local application imports
 from dissent.config import MODELS_DIR, DATA_DIR
 
 logging.basicConfig(

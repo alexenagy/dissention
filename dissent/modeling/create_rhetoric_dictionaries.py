@@ -1,12 +1,7 @@
-# Standard library
 from pathlib import Path
-
-# Third-party libraries
 from tqdm import tqdm
 import typer
 from gensim.models import Word2Vec
-
-# Local application imports
 from dissent.config import INTERIM_DATA_DIR, MODELS_DIR, RAW_DATA_DIR
 
 app = typer.Typer()

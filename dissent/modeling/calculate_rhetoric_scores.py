@@ -1,8 +1,5 @@
-# Standard library
 from pathlib import Path
 from sys import stdout
-
-# Third-party libraries
 from tqdm import tqdm
 import typer
 from gensim.models import Word2Vec
@@ -13,8 +10,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 import pyarrow.parquet as pq
 import multiprocessing as mp
 import spacy
-
-# Local application imports
 from dissent.config import PROCESSED_DATA_DIR, INTERIM_DATA_DIR, MODELS_DIR
 
 app = typer.Typer()

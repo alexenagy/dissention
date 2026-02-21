@@ -1,14 +1,7 @@
-# Just for testing/exploring word similarities
-
-# Standard library
 import logging
 import os
-
-# Third-party libraries
 import typer
 from gensim.models import Word2Vec
-
-# Local application imports
 from dissent.config import MODELS_DIR
 
 logging.basicConfig(

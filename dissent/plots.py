@@ -1,7 +1,4 @@
-# Standard library
 from pathlib import Path
-
-# Third-party libraries
 import numpy as np
 import pandas as pd
 import typer
@@ -11,8 +8,6 @@ from gensim.models import Word2Vec
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
 import plotly.express as px
-
-# Local application imports
 from dissent.config import FIGURES_DIR, PROCESSED_DATA_DIR, MODELS_DIR, INTERIM_DATA_DIR
 
 app = typer.Typer()

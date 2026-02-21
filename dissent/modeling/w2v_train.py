@@ -1,18 +1,13 @@
-# Standard library
 import logging
 import os
 from multiprocessing import Pool
 from pathlib import Path
-
-# Third-party libraries
 import pandas as pd
 import spacy
 from gensim.models import Word2Vec
 from loguru import logger
 from nltk.corpus import stopwords, words
 from tqdm import tqdm
-
-# Local application imports
 from dissent.config import INTERIM_DATA_DIR, MODELS_DIR, RAW_DATA_DIR
 
 # Configuration
@@ -24,7 +19,11 @@ OUTPUT_DIR = MODELS_DIR / "iteration_0009"
 _ = os.makedirs(OUTPUT_DIR, exist_ok=True)
 WORKERS = 64
 
-nlp = spacy.load("en_core_web_lg")
+
+def init_worker():
+    global nlp
+    nlp = spacy.load("en_core_web_lg", disable=["parser", "ner"])
+    nlp.max_length = 2000000
 
 
 def preprocess_text(text):
@@ -98,7 +97,7 @@ def main():
                 continue
 
         # Step 2c: Preprocess text in parallel
-        with Pool(WORKERS) as p:
+        with Pool(WORKERS, initializer=init_worker) as p:
             preprocessed_sentences = list(
                 tqdm(p.imap(preprocess_text, docs), total=len(docs), desc="Preprocessing text")
             )
