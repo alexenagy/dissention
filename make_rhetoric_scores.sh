@@ -8,4 +8,4 @@
 #SBATCH --mail-user=alexandrianagy2026@u.northwestern.edu
 
 #uv run dissent/modeling/calculate_rhetoric_scores.py
-uv run dissent/modeling/word2vec_training.py
+uv run dissent/modeling/w2v_train.py
