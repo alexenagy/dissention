@@ -8,7 +8,7 @@ from loguru import logger
 from tqdm import tqdm
 
 # Local application imports
-from dissent.config import RAW_DATA_DIR, PROCESSED_DATA_DIR
+from dissent.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, INTERIM_DATA_DIR
 
 app = typer.Typer()
 
@@ -22,7 +22,7 @@ def main():
     - date_filed is NULL if unavailable
     """
     
-    parquets = [pd.read_parquet(f) for f in tqdm(PROCESSED_DATA_DIR.rglob("shard_*.parquet"))]
+    parquets = [pd.read_parquet(f) for f in tqdm(INTERIM_DATA_DIR.rglob("shard_*.parquet"))]
     df = pd.concat(parquets)
 
     print(df.head())

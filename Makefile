@@ -61,7 +61,7 @@ download:
 ## Make dataset
 .PHONY: data
 data:
-	uv run hf download harvard-lil/cold-cases --repo-type dataset --local-dir data/processed/
+	uv run hf download harvard-lil/cold-cases --repo-type dataset --local-dir data/raw/
 
 .PHONY: features
 features:

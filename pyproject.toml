@@ -28,6 +28,8 @@ dependencies = [
   "scipy",
   "tqdm",
   "typer",
+  "spacy>=3.8.11",
+  "huggingface-hub>=1.4.1",
 ]
 requires-python = "~=3.12.0"
 
