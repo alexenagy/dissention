@@ -30,6 +30,7 @@ dependencies = [
   "typer",
   "spacy>=3.8.11",
   "huggingface-hub>=1.4.1",
+  "pandoc>=2.4",
 ]
 requires-python = "~=3.12.0"
 

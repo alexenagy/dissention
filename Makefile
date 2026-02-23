@@ -10,23 +10,16 @@ PYTHON_INTERPRETER = python
 # COMMANDS                                                                      #
 #################################################################################
 
-
 ## Install Python dependencies
 .PHONY: requirements
 requirements:
 	uv sync
-	
-
-.PHONY: analysis
-analysis:
-	uv run python -m cudf.pandas dissent/modeling/analysis.py
 
 ## Delete all compiled Python files
 .PHONY: clean
 clean:
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
-
 
 ## Lint using ruff (use `make format` to do formatting)
 .PHONY: lint
@@ -40,32 +33,6 @@ format:
 	ruff check --fix
 	ruff format
 
-.PHONY: download
-download:
-	if [ ! -f data/raw/opinions-2024-12-31.csv.bz2 ]; then \
-		echo Opinions file not found! Downloading the file. \(This could take a while.\); \
-		wget --directory-prefix=data/raw https://storage.courtlistener.com/bulk-data/opinions-2024-12-31.csv.bz2; \
-		echo Opinions file downloaded!; \
-	fi
-	if [ ! -f data/raw/opinion-clusters-2024-12-31.csv.bz2 ]; then \
-		echo Opinions cluster file not found! Downloading the file. \(This could take a while.\);\
-		wget --directory-prefix=data/raw https://storage.courtlistener.com/bulk-data/opinion-clusters-2024-12-31.csv.bz2; \
-		echo Opinions cluster file downloaded!; \
-	fi
-	if [ ! -f data/raw/dockets-2024-12-31.csv.bz2 ]; then \
-		echo Opinions cluster file not found! Downloading the file. \(This could take a while.\); \
-		wget --directory-prefix=data/raw  https://storage.courtlistener.com/bulk-data/dockets-2024-12-31.csv.bz2; \
-		echo Opinions cluster file downloaded!; \
-	fi
-
-## Make dataset
-.PHONY: data
-data:
-	uv run hf download harvard-lil/cold-cases --repo-type dataset --local-dir data/raw/
-
-.PHONY: features
-features:
-	uv run dissent/features.py
 ## Set up Python interpreter environment
 .PHONY: create_environment
 create_environment:
@@ -73,9 +40,53 @@ create_environment:
 	@echo ">>> New uv virtual environment created. Activate with:"
 	@echo ">>> Windows: .\\\\.venv\\\\Scripts\\\\activate"
 	@echo ">>> Unix/macOS: source ./.venv/bin/activate"
-	
 
+## Download COLD Cases dataset from HuggingFace
+.PHONY: download
+download:
+	uv run huggingface-cli download harvard-lil/cold-cases --repo-type dataset --local-dir data/raw/
 
+## Train Word2Vec model on COLD Cases corpus (submit as SLURM job)
+.PHONY: train
+train:
+	sbatch scripts/w2v_train.sh
+
+## Build processed dataset with CF-scores (submit as SLURM job)
+.PHONY: dataset
+dataset:
+	sbatch scripts/make_dataset.sh
+
+## Generate Wordscores seed word candidates
+.PHONY: wordscores
+wordscores:
+	uv run dissent/modeling/create_seed_words.py
+
+## Expand seed dictionaries using Word2Vec
+.PHONY: expand
+expand:
+	uv run dissent/modeling/expand_dictionaries.py
+
+## Calculate rhetoric scores across full corpus (submit as SLURM job)
+.PHONY: rhetoric
+rhetoric:
+	sbatch scripts/calculate_rhetoric_scores.sh
+
+## Run full pipeline in order (requires SLURM jobs to complete between steps)
+.PHONY: pipeline
+pipeline:
+	@echo "Step 1: Download data"
+	$(MAKE) download
+	@echo "Step 2: Train Word2Vec"
+	$(MAKE) train
+	@echo "Step 3: Build dataset"
+	$(MAKE) dataset
+	@echo "Step 4: Generate Wordscores seed words"
+	$(MAKE) wordscores
+	@echo "Step 5: Manually review data/interim/wordscores_vocabulary.csv"
+	@echo "        Edit data/interim/ideological_seed_words.txt and data/interim/nonideological_seed_words.txt"
+	@echo "        Then run: make expand"
+	@echo "Step 6: Calculate rhetoric scores"
+	@echo "        Run: make rhetoric"
 
 #################################################################################
 # Self Documenting Commands                                                     #

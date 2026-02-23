@@ -14,7 +14,7 @@ app = typer.Typer()
 
 def semantic_corner():
     """Create semantic corner plot with global inset map."""
-    model_path = MODELS_DIR / "word2vec_checkpoint_00031.model"
+    model_path = MODELS_DIR / "iteration_0009/word2vec_checkpoint_00031.model"
     model = Word2Vec.load(str(model_path))
 
     # ----- GLOBAL PCA -----
@@ -31,7 +31,7 @@ def semantic_corner():
     })
 
     # ----- SEMANTIC CORNER -----
-    anchors = ["political", "judge", "court"]
+    anchors = ["evidence"]
     top_n = 30
 
     words_to_plot = set(anchors)

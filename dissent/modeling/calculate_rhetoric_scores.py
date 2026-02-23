@@ -14,11 +14,13 @@ from dissent.config import PROCESSED_DATA_DIR, INTERIM_DATA_DIR, MODELS_DIR
 
 app = typer.Typer()
 
-model_path = MODELS_DIR / "word2vec_checkpoint_00031.model"
+model_path = MODELS_DIR / "iteration_0009/word2vec_checkpoint_00031.model"
 
 model = None
-politics_vectors = None
-evidence_vectors = None
+ideological_vectors = None
+nonideological_vectors = None
+ideological_mean = None
+nonideological_mean = None
 nlp = None
 stop_words = None
 english_words = None
@@ -28,17 +30,18 @@ def init_worker():
     """
     Runs once per CPU core to load heavy assets into RAM.
     """
-    global model, politics_vectors, evidence_vectors, nlp, stop_words, english_words
+    global model, ideological_vectors, nonideological_vectors, ideological_mean, nonideological_mean, nlp, stop_words, english_words
 
     # 1. Load Model
     model = Word2Vec.load(str(model_path))
 
     # 2. Pre-load NLP tools
     nlp = spacy.load("en_core_web_lg")
+    nlp.max_length = 10000000
     stop_words = set(stopwords.words("english"))
     english_words = set(words.words())
 
-    # 3. Pre-calculate Seed Vectors
+    # 3. Pre-calculate dictionary vectors and concept means
     def get_vectors_from_file(filename):
         vecs = []
         path = INTERIM_DATA_DIR / filename
@@ -50,15 +53,19 @@ def init_worker():
                         vecs.append(model.wv[word])
         return vecs
 
-    politics_vectors = get_vectors_from_file("politics_dictionary.txt")
-    evidence_vectors = get_vectors_from_file("evidence_dictionary.txt")
+    ideological_vectors = get_vectors_from_file("ideological_dictionary.txt")
+    nonideological_vectors = get_vectors_from_file("nonideological_dictionary.txt")
 
-    print(f"DEBUG: Loaded {len(politics_vectors)} politics vectors.")
-    print(f"DEBUG: Loaded {len(evidence_vectors)} evidence vectors.")
-    if len(politics_vectors) == 0:
-        print("CRITICAL: No politics seed words were found in the Model Vocabulary!")
-    if len(evidence_vectors) == 0:
-        print("CRITICAL: No evidence seed words were found in the Model Vocabulary!")
+    # Pre-compute concept vectors by averaging seed word embeddings (EMI methodology)
+    ideological_mean = np.array(ideological_vectors).mean(axis=0, keepdims=True) if ideological_vectors else None
+    nonideological_mean = np.array(nonideological_vectors).mean(axis=0, keepdims=True) if nonideological_vectors else None
+
+    print(f"DEBUG: Loaded {len(ideological_vectors)} ideological vectors.")
+    print(f"DEBUG: Loaded {len(nonideological_vectors)} nonideological vectors.")
+    if len(ideological_vectors) == 0:
+        print("CRITICAL: No ideological dictionary words were found in the Model Vocabulary!")
+    if len(nonideological_vectors) == 0:
+        print("CRITICAL: No nonideological dictionary words were found in the Model Vocabulary!")
 
 
 # --- WORKER FUNCTIONS ---
@@ -73,42 +80,69 @@ def preprocess_text(text):
     ]
 
 
-def calculate_distance(tokens, seed_vectors):
-    """Mean cosine similarity between token vectors and seed vectors."""
-    if not tokens or not seed_vectors:
+def calculate_distance(token_mean, concept_mean):
+    """
+    Cosine similarity between averaged document token vector and averaged concept vector.
+    Follows EMI methodology: both document and concept are represented as single mean vectors.
+    """
+    if token_mean is None or concept_mean is None:
         return None
+    return cosine_similarity(concept_mean, token_mean)[0][0]
 
-    seed_matrix = np.array(seed_vectors)
-    token_vectors = [model.wv[t] for t in tokens if t in model.wv]
-    if not token_vectors:
-        return None
 
-    token_matrix = np.array(token_vectors)
-    return np.mean(cosine_similarity(seed_matrix, token_matrix))
+def length_adjust(df, score_col):
+    """
+    Adjust rhetoric scores for opinion length following EMI methodology:
+    1. Bin opinions by token count into deciles
+    2. Subtract bin mean from each score
+    3. Apply Z-transform within each bin
+    """
+    df = df.copy()
+    df["length_bin"] = pd.qcut(df["token_count"], q=10, duplicates="drop")
+    df[score_col] = df.groupby("length_bin")[score_col].transform(
+        lambda x: (x - x.mean()) / x.std() if x.std() > 0 else x - x.mean()
+    )
+    return df
 
 
 def process_batch(df_batch):
     """
-    Explode opinions, compute rhetoric score per opinion, then average per case ID.
+    Explode opinions, compute rhetoric score per opinion, return with token counts
+    for length adjustment.
     """
     df_batch = df_batch.explode("opinions")
 
-    def fast_rhetoric_score(op):
+    results = []
+    for _, row in df_batch.iterrows():
+        op = row["opinions"]
         if not isinstance(op, dict):
-            return None
+            continue
         text = op.get("opinion_text")
         if not text:
-            return None
+            continue
 
         tokens = preprocess_text(text)
-        a = calculate_distance(tokens, politics_vectors)
-        b = calculate_distance(tokens, evidence_vectors)
-        return b - a if (a is not None and b is not None) else None
+        token_vectors = [model.wv[t] for t in tokens if t in model.wv]
+        if not token_vectors:
+            continue
 
-    df_batch["rhetoric_score"] = df_batch["opinions"].apply(fast_rhetoric_score)
+        # Average all token embeddings into a single document vector (EMI methodology)
+        token_mean = np.array(token_vectors).mean(axis=0, keepdims=True)
 
-    # Collapse multiple opinions per case into a single mean rhetoric score
-    return df_batch.groupby("id")["rhetoric_score"].mean().reset_index()
+        ideological_score = calculate_distance(token_mean, ideological_mean)
+        nonideological_score = calculate_distance(token_mean, nonideological_mean)
+
+        if ideological_score is not None and nonideological_score is not None:
+            results.append({
+                "id": row["id"],
+                "rhetoric_score": nonideological_score - ideological_score,
+                "token_count": len(token_vectors),
+            })
+
+    if not results:
+        return pd.DataFrame(columns=["id", "rhetoric_score", "token_count"])
+
+    return pd.DataFrame(results)
 
 
 def batch_inputs():
@@ -142,6 +176,14 @@ def batch_inputs():
 
     print("Concatenating scores...", file=stdout)
     rhetoric_score_df = pd.concat(processed_chunks, ignore_index=True)
+
+    # Length adjustment across full dataset before aggregating to case level
+    print("Applying length adjustment...", file=stdout)
+    rhetoric_score_df = length_adjust(rhetoric_score_df, "rhetoric_score")
+
+    # Collapse multiple opinions per case into a single mean rhetoric score
+    print("Aggregating to case level...", file=stdout)
+    rhetoric_score_df = rhetoric_score_df.groupby("id")["rhetoric_score"].mean().reset_index()
 
     print("Loading metadata (year and jurisdiction)...", file=stdout)
     metadata_df = pd.read_parquet(
