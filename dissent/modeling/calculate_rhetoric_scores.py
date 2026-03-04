@@ -1,4 +1,3 @@
-from pathlib import Path
 from sys import stdout
 from tqdm import tqdm
 import typer
@@ -7,10 +6,9 @@ import numpy as np
 import pandas as pd
 from nltk.corpus import stopwords, words
 from sklearn.metrics.pairwise import cosine_similarity
-import pyarrow.parquet as pq
 import multiprocessing as mp
 import spacy
-from dissent.config import PROCESSED_DATA_DIR, INTERIM_DATA_DIR, MODELS_DIR
+from dissent.config import PROCESSED_DATA_DIR, MODELS_DIR
 
 app = typer.Typer()
 
@@ -44,7 +42,7 @@ def init_worker():
     # 3. Pre-calculate dictionary vectors and concept means
     def get_vectors_from_file(filename):
         vecs = []
-        path = INTERIM_DATA_DIR / filename
+        path = PROCESSED_DATA_DIR / filename
         if path.exists():
             with open(path, "r") as f:
                 for line in f:
@@ -67,8 +65,6 @@ def init_worker():
     if len(nonideological_vectors) == 0:
         print("CRITICAL: No nonideological dictionary words were found in the Model Vocabulary!")
 
-
-# --- WORKER FUNCTIONS ---
 
 def preprocess_text(text):
     """Tokenize, lowercase, remove stopwords, lemmatize with spaCy, and filter English words."""
@@ -107,18 +103,13 @@ def length_adjust(df, score_col):
 
 def process_batch(df_batch):
     """
-    Explode opinions, compute rhetoric score per opinion, return with token counts
-    for length adjustment.
+    Compute rhetoric score per opinion row.
+    Returns dataframe with id, rhetoric_score, and token_count for length adjustment.
     """
-    df_batch = df_batch.explode("opinions")
-
     results = []
     for _, row in df_batch.iterrows():
-        op = row["opinions"]
-        if not isinstance(op, dict):
-            continue
-        text = op.get("opinion_text")
-        if not text:
+        text = row["opinion_text"]
+        if not text or not isinstance(text, str):
             continue
 
         tokens = preprocess_text(text)
@@ -147,25 +138,28 @@ def process_batch(df_batch):
 
 def batch_inputs():
     input_file = PROCESSED_DATA_DIR / "dataset.parquet"
-    parquet_file = pq.ParquetFile(input_file)
 
-    batch_size = 100
+    batch_size = 1000
 
-    print(f"Streaming batches (size {batch_size})...", file=stdout)
+    # Deduplicate to one row per opinion before processing
+    print("Deduplicating opinions...", file=stdout)
+    opinions_df = pd.read_parquet(
+        input_file,
+        columns=["id", "opinion_text"]
+    ).drop_duplicates(subset=["id"])
+    print(f"Unique opinions to process: {len(opinions_df)}", file=stdout)
 
-    batch_generator = (
-        b.to_pandas() for b in parquet_file.iter_batches(
-            batch_size=batch_size,
-            columns=["id", "opinions"]
-        )
-    )
-
-    total_expected = (parquet_file.metadata.num_rows // batch_size) + 1
+    # Split into batches manually after deduplication
+    batches = [
+        opinions_df.iloc[i:i + batch_size]
+        for i in range(0, len(opinions_df), batch_size)
+    ]
+    total_expected = len(batches)
 
     with mp.Pool(processes=24, initializer=init_worker) as pool:
         processed_chunks = list(
             tqdm(
-                pool.imap_unordered(process_batch, batch_generator),
+                pool.imap_unordered(process_batch, batches),
                 total=total_expected,
                 desc="Processing Opinions",
                 mininterval=10,
@@ -185,17 +179,18 @@ def batch_inputs():
     print("Aggregating to case level...", file=stdout)
     rhetoric_score_df = rhetoric_score_df.groupby("id")["rhetoric_score"].mean().reset_index()
 
+    # Load metadata, deduplicated to one row per opinion
     print("Loading metadata (year and jurisdiction)...", file=stdout)
     metadata_df = pd.read_parquet(
         input_file,
         columns=["id", "year", "court_jurisdiction"]
-    )
+    ).drop_duplicates(subset=["id"])
 
     print("Merging and final filtering...", file=stdout)
     final_df = metadata_df.merge(rhetoric_score_df, on="id", how="left")
     final_df = final_df[["court_jurisdiction", "year", "rhetoric_score"]]
 
-    output_path = PROCESSED_DATA_DIR / "processed_rhetoric_scores.parquet"
+    output_path = PROCESSED_DATA_DIR / "rhetoric_scores.parquet"
     final_df.to_parquet(output_path)
 
     print(f"Success! Saved to {output_path}", file=stdout)

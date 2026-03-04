@@ -16,7 +16,7 @@ def main():
     model = Word2Vec.load(str(model_path))
 
     words_to_test = [
-        "evidence",
+        "respectfully",
     ]
     for w in words_to_test:
         sims = model.wv.most_similar(w)

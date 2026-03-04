@@ -1,91 +1,168 @@
-# Standard library
-from pathlib import Path
-
-# Third-party libraries
+import multiprocessing as mp
 import numpy as np
 import pandas as pd
 from loguru import logger
+from nltk.corpus import stopwords, words
+import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
-
-# Local application imports
 from dissent.config import MODELS_DIR, PROCESSED_DATA_DIR, INTERIM_DATA_DIR
 
+nlp = None
+stop_words = None
+english_words = None
 
-def compute_wordscores(df, text_col="opinion_text", score_col="candidate.cfscore", top_n=500):
+
+def init_worker():
+    """Load spaCy and NLTK resources once per worker process."""
+    global nlp, stop_words, english_words
+    nlp = spacy.load("en_core_web_lg", disable=["parser", "ner"])
+    nlp.max_length = 10000000
+    stop_words = set(stopwords.words("english"))
+    english_words = set(words.words())
+
+
+def preprocess_text(text):
     """
-    Implement Wordscores (Laver, Benoit & Garry 2003) using CF-scores as reference anchors.
+    Preprocess opinion text to match Word2Vec training pipeline.
 
-    Reference text 1: most ideologically extreme 25% of cases by mean absolute CF-score
-    Reference text 2: least ideologically extreme 25% of cases by mean absolute CF-score
+    Steps:
+    1. Tokenize and lemmatize with spaCy
+    2. Lowercase
+    3. Remove non-alphabetic tokens
+    4. Remove stopwords
+    5. Filter to English words only
+    Returns a single string of space-joined lemmas for TF-IDF compatibility.
+    """
+    doc = nlp(text)
+    tokens = [
+        token.lemma_.lower()
+        for token in doc
+        if token.is_alpha
+        and token.text.lower() not in stop_words
+        and token.lemma_.lower() in english_words
+    ]
+    return " ".join(tokens)
 
-    Wordscores are computed separately for each reference group. Words are ranked by
-    the difference between their ideological score and their nonideological score:
-    - High difference = associated with ideological justices -> ideological seed candidates
-    - Low difference (or negative) = associated with nonideological justices -> nonideological seed candidates
+
+def preprocess_corpus(texts, n_workers=24):
+    """Preprocess a list of opinion texts in parallel."""
+    with mp.Pool(processes=n_workers, initializer=init_worker) as pool:
+        processed = list(pool.imap(preprocess_text, texts))
+    return processed
+
+
+def compute_wordscores(df, text_col="opinion_text", score_col="pajid", top_n=500, n_workers=24):
+    """
+    Construct ideological and nonideological seed word dictionaries using
+    PAJID scores as reference anchors, following the logic of Wordscores
+    (Laver, Benoit & Garry 2003). Opinions are split into ideologically
+    extreme and moderate reference groups based on absolute deviation from
+    PAJID center (50).
+
+    For each dictionary:
+    - Ideological words: highest ideological_diff (ideological_wordscore - nonideological_wordscore)
+    - Nonideological words: highest nonideological_diff (nonideological_wordscore - ideological_wordscore)
+
+    Both dictionaries select words that are maximally distinctive to their
+    respective group, not just highly scored in absolute terms.
+
+    Preprocessing matches the Word2Vec training pipeline exactly so that
+    seed words are guaranteed to exist in the Word2Vec vocabulary.
     """
     df = df.copy()
-    df["cf_score_abs"] = df[score_col].abs()
 
-    # Reference text 1: most ideologically extreme 25%
-    ideological_cutoff = df["cf_score_abs"].quantile(0.75)
-    ideological_df = df[df["cf_score_abs"] >= ideological_cutoff].copy()
+    # PAJID is centered at 50 — ideological intensity is deviation from center
+    df["abs_pajid"] = (df[score_col] - 50).abs()
 
-    # Reference text 2: least ideologically extreme 25% (closest to 0)
-    nonideological_cutoff = df["cf_score_abs"].quantile(0.25)
-    nonideological_df = df[df["cf_score_abs"] <= nonideological_cutoff].copy()
+    # Reference text 1: most ideologically extreme 10% (closest to PAJID score 0 and 100)
+    liberal_cutoff = df["abs_pajid"].quantile(0.95)
+    liberal_df = df[df["abs_pajid"] >= liberal_cutoff].copy()
 
-    logger.info(f"Reference text 1 (ideological, |CF| >= {ideological_cutoff:.3f}): {len(ideological_df)}")
-    logger.info(f"Reference text 2 (nonideological, |CF| <= {nonideological_cutoff:.3f}): {len(nonideological_df)}")
+    conservative_cutoff = df["abs_pajid"].quantile(0.05)
+    conservative_df = df[df["abs_pajid"] <= conservative_cutoff].copy()
 
-    # Fit vectorizer on combined reference texts to get shared vocabulary
+    ideological_df = pd.concat([liberal_df, conservative_df])
+
+    # Reference text 2: least ideologically extreme 10% (closest to PAJID score 50)
+
+    liberal_cutoff = df["abs_pajid"].quantile(0.55)
+    liberal_df = df[df["abs_pajid"] <= liberal_cutoff].copy()
+
+    conservative_cutoff = df["abs_pajid"].quantile(0.45)
+    conservative_df = df[df["abs_pajid"] >= conservative_cutoff].copy()
+
+    nonideological_df = pd.merge(liberal_df, conservative_df, how = "inner")
+
+    # Preprocess both groups using same pipeline as Word2Vec training
+    logger.info("Preprocessing ideological reference texts...")
+    ideological_df["processed_text"] = preprocess_corpus(
+        ideological_df[text_col].tolist(), n_workers=n_workers
+    )
+
+    logger.info("Preprocessing nonideological reference texts...")
+    nonideological_df["processed_text"] = preprocess_corpus(
+        nonideological_df[text_col].tolist(), n_workers=n_workers
+    )
+
+    # Fit vectorizer on combined preprocessed texts
+    # No stopword removal or lowercasing here since already handled in preprocessing
     vectorizer = TfidfVectorizer(
         max_features=top_n,
         min_df=10,
-        stop_words="english",
         token_pattern=r"(?u)\b[a-zA-Z]{3,}\b",
     )
-    vectorizer.fit(pd.concat([ideological_df[text_col], nonideological_df[text_col]]))
+    vectorizer.fit(pd.concat([
+        ideological_df["processed_text"],
+        nonideological_df["processed_text"]
+    ]))
     vocab = vectorizer.get_feature_names_out()
 
     def group_wordscores(group_df, abs_scores):
-        """Compute wordscores for a reference group weighted by absolute CF-score."""
-        matrix = vectorizer.transform(group_df[text_col]).toarray()
+        """Compute wordscores for a reference group weighted by absolute PAJID deviation."""
+        matrix = vectorizer.transform(group_df["processed_text"]).toarray()
         freq_total = matrix.sum(axis=0)
         score_weighted = (matrix * abs_scores[:, np.newaxis]).sum(axis=0)
         return np.where(freq_total > 0, score_weighted / freq_total, 0)
 
     # Compute wordscores for each reference group
-    ideological_scores = group_wordscores(ideological_df, ideological_df["cf_score_abs"].values)
-    nonideological_scores = group_wordscores(nonideological_df, nonideological_df["cf_score_abs"].values)
-
-    # Difference score: high = more associated with ideological justices
-    diff_scores = ideological_scores - nonideological_scores
+    logger.info("Computing wordscores...")
+    ideological_scores = group_wordscores(ideological_df, ideological_df["abs_pajid"].values)
+    nonideological_scores = group_wordscores(nonideological_df, nonideological_df["abs_pajid"].values)
 
     results = pd.DataFrame(
         {
             "word": vocab,
             "ideological_wordscore": ideological_scores,
             "nonideological_wordscore": nonideological_scores,
-            "diff_score": diff_scores,
-            "total_freq_ideological": vectorizer.transform(ideological_df[text_col]).toarray().sum(axis=0),
-            "total_freq_nonideological": vectorizer.transform(nonideological_df[text_col]).toarray().sum(axis=0),
+            "ideological_diff": ideological_scores - nonideological_scores,
+            "nonideological_diff": nonideological_scores - ideological_scores,
+            "total_freq_ideological": vectorizer.transform(
+                ideological_df["processed_text"]
+            ).toarray().sum(axis=0),
+            "total_freq_nonideological": vectorizer.transform(
+                nonideological_df["processed_text"]
+            ).toarray().sum(axis=0),
         }
-    ).sort_values("diff_score", ascending=False)
+    ).sort_values("ideological_diff", ascending=False)
 
     return results, ideological_df, nonideological_df
 
 
 def main():
-    # Load only the columns needed for Wordscores — skips nested opinions column
+    # Load only the columns needed — opinion_text is the flat extracted text
+    # column used for scoring; the nested opinions column is not needed here
     df = pd.read_parquet(
         PROCESSED_DATA_DIR / "dataset.parquet",
-        columns=["id", "year", "court_jurisdiction", "state", "last_name", "candidate.cfscore", "abs_cfscore", "opinion_text"]
+        columns=[
+            "id", "year", "court_jurisdiction", "state",
+            "last_name", "pajid", "opinion_text"
+        ]
     )
     logger.info(f"Loaded {len(df)} rows")
 
-    # Drop rows without CF-score
-    df = df.dropna(subset=["candidate.cfscore"])
-    logger.info(f"Rows with CF-scores: {len(df)}")
+    # Drop rows without PAJID score
+    df = df.dropna(subset=["pajid"])
+    logger.info(f"Rows with PAJID scores: {len(df)}")
 
     # Drop rows without opinion text
     df = df.dropna(subset=["opinion_text"])
@@ -94,24 +171,30 @@ def main():
     # Run wordscores
     word_results, ideological_df, nonideological_df = compute_wordscores(df)
 
-    # Words most associated with ideological justices (top of diff_score)
-    print("\nWords most associated with IDEOLOGICAL justices (ideological seed candidates):")
-    print(word_results.head(50).to_string())
+    # Words most distinctive to ideological justices
+    print("\nWords most associated with IDEOLOGICAL justices:")
+    print(word_results.sort_values("ideological_diff", ascending=False).head(50)["word"].to_string(index=False))
 
-    # Words most associated with nonideological justices (bottom of diff_score)
-    print("\nWords most associated with NONIDEOLOGICAL justices (nonideological seed candidates):")
-    print(word_results.tail(50).to_string())
+    # Words most distinctive to nonideological justices
+    print("\nWords most associated with NONIDEOLOGICAL justices:")
+    print(word_results.sort_values("nonideological_diff", ascending=False).head(50)["word"].to_string(index=False))
 
     # Save full vocabulary
     word_results.to_csv(INTERIM_DATA_DIR / "wordscores_vocabulary.csv", index=False)
 
     # Save top 50 ideological seed words
     with open(INTERIM_DATA_DIR / "ideological_seed_words.txt", "w") as f:
-        f.write("\n".join(word_results.head(50)["word"].tolist()))
+        f.write("\n".join(
+            word_results.sort_values("ideological_diff", ascending=False)
+            .head(50)["word"].tolist()
+        ))
 
-    # Save bottom 50 nonideological seed words
+    # Save top 50 nonideological seed words
     with open(INTERIM_DATA_DIR / "nonideological_seed_words.txt", "w") as f:
-        f.write("\n".join(word_results.tail(50)["word"].tolist()))
+        f.write("\n".join(
+            word_results.sort_values("nonideological_diff", ascending=False)
+            .head(50)["word"].tolist()
+        ))
 
     logger.success(f"Saved word scores and seed dictionaries to {INTERIM_DATA_DIR}")
 
