@@ -3,18 +3,19 @@ rhetoric_event_study.py
 
 Analysis 3: Event study plots for states that switched judicial selection mechanisms.
 
-For each switching state, compares the mean detrended rhetoric score in the
+For each switching state, compares the mean rhetoric score in the
 6 years before vs. 6 years after the switch year. Results are grouped by
-transition pair (from mechanism → to mechanism) so that comparisons are
+transition pair (from mechanism -> to mechanism) so that comparisons are
 internally coherent — the direction of change only makes sense relative
 to where the state started.
 
-Output: one PNG per transition-pair group, with panels stacked vertically.
+Output: one PNG per transition-pair group, with panels in rows of three.
 
 Negative scores = more ideological language
 Positive scores = more neutral language
 '''
 
+import math
 import pandas as pd
 import statsmodels.formula.api as smf
 from scipy import stats
@@ -46,48 +47,41 @@ SWITCHERS = [
 
 # =============================================================================
 # GROUPS
-# One output PNG per transition pair. Grouped this way because the direction
-# of rhetoric change after a switch is only interpretable relative to where
-# the state started — e.g. P→R and N→R are different treatments.
+# One output PNG per transition pair, panels in rows of 3.
 # =============================================================================
 GROUPS = [
     {
-        "filename": "event_study_partisan_to_retention.png",
-        "title": "Partisan Elections → Retention: Detrended Rhetoric Scores",
+        "filename": "event_study_retention.png",
+        "title": "All Transitions → Retention",
+        "row_height": 220,
+        "vertical_spacing": 0.08,
         "switchers": [
             ("FL", "P", "R", 1971),
-            ("NM", "P", "R", 1989),
-        ],
-    },
-    {
-        "filename": "event_study_nonpartisan_to_retention.png",
-        "title": "Nonpartisan Elections → Retention: Detrended Rhetoric Scores",
-        "switchers": [
             ("AZ", "N", "R", 1974),
+            ("VT", "A", "R", 1974),
             ("SD", "N", "R", 1973),
             ("WY", "N", "R", 1973),
+            ("NM", "P", "R", 1989),
             ("UT", "N", "R", 1985),
         ],
     },
     {
-        "filename": "event_study_appointment_to_retention.png",
-        "title": "Appointment → Retention: Detrended Rhetoric Scores",
-        "switchers": [
-            ("VT", "A", "R", 1974),
-        ],
-    },
-    {
-        "filename": "event_study_partisan_to_nonpartisan.png",
-        "title": "Partisan Elections → Nonpartisan Elections: Detrended Rhetoric Scores",
+        "filename": "event_study_nonpartisan.png",
+        "title": "Partisan → Nonpartisan",
+        "row_height": 300,
+        "vertical_spacing": 0.15,
         "switchers": [
             ("KY", "P", "N", 1976),
             ("MS", "P", "N", 1994),
+            ("NC", "P", "N", 2002),
             ("WV", "P", "N", 2016),
         ],
     },
     {
         "filename": "event_study_nc.png",
-        "title": "North Carolina: Detrended Rhetoric Scores Around Selection Mechanism Switches",
+        "title": "North Carolina",
+        "row_height": 350,
+        "vertical_spacing": 0.15,
         "switchers": [
             ("NC", "P", "N", 2002),
             ("NC", "N", "P", 2018),
@@ -96,8 +90,8 @@ GROUPS = [
 ]
 
 MECHANISM_LABELS = {
-    "P": "Partisan Elections",
-    "N": "Nonpartisan Elections",
+    "P": "Partisan",
+    "N": "Nonpartisan",
     "A": "Appointment",
     "R": "Retention",
 }
@@ -118,7 +112,7 @@ def court_to_state_abbrev(court_jurisdiction):
 
 def compute_result(state, from_mech, to_mech, switch_year, annual):
     '''
-    Computes pre/post mean detrended rhetoric and t-test for one switching state.
+    Computes pre/post mean rhetoric and t-test for one switching state.
     Pre period: [switch_year - WINDOW, switch_year - 1]
     Post period: [switch_year, switch_year + WINDOW]
     Returns None if fewer than 2 observations in either period.
@@ -128,12 +122,12 @@ def compute_result(state, from_mech, to_mech, switch_year, annual):
     pre = court_data[
         (court_data["year"] >= switch_year - WINDOW) &
         (court_data["year"] < switch_year)
-    ]["mean_detrended"]
+    ]["mean"]
 
     post = court_data[
         (court_data["year"] >= switch_year) &
         (court_data["year"] <= switch_year + WINDOW)
-    ]["mean_detrended"]
+    ]["mean"]
 
     if len(pre) < 2 or len(post) < 2:
         print(f"  Skipping {state} {switch_year}: insufficient data "
@@ -183,7 +177,7 @@ def make_subplot_panel(fig, row, col, state, switch_year, annual, result, legend
     show_post_legend = not legend_added["post"]
 
     fig.add_trace(go.Scatter(
-        x=pre_connected["year"], y=pre_connected["mean_detrended"],
+        x=pre_connected["year"], y=pre_connected["mean"],
         mode="lines+markers",
         line=dict(color=COLOR_PRE, width=2),
         marker=dict(size=5),
@@ -194,7 +188,7 @@ def make_subplot_panel(fig, row, col, state, switch_year, annual, result, legend
     legend_added["pre"] = True
 
     fig.add_trace(go.Scatter(
-        x=post_data["year"], y=post_data["mean_detrended"],
+        x=post_data["year"], y=post_data["mean"],
         mode="lines+markers",
         line=dict(color=COLOR_POST, width=2, dash="dash"),
         marker=dict(size=5),
@@ -235,18 +229,16 @@ def make_subplot_panel(fig, row, col, state, switch_year, annual, result, legend
 
 
 def save_group_figure(group, all_results, annual):
-    '''
-    Builds and saves one event-study figure for a transition-pair group.
-    Panels are stacked vertically (one column).
-    '''
     switchers = [s for s in group["switchers"] if (s[0], s[3]) in all_results]
     if not switchers:
         print(f"  Skipping {group['filename']} — no data available")
         return
 
     n = len(switchers)
-    ncols = 1
-    nrows = n
+    ncols = min(2, n)
+    nrows = math.ceil(n / ncols)
+    row_height = group.get("row_height", 300)
+    vertical_spacing = group.get("vertical_spacing", 0.15)
 
     subplot_titles = [
         f"{s} ({MECHANISM_LABELS[f]}→{MECHANISM_LABELS[t]}, {y}) {all_results[(s, y)]['Sig']}"
@@ -256,32 +248,34 @@ def save_group_figure(group, all_results, annual):
     fig = make_subplots(
         rows=nrows, cols=ncols,
         subplot_titles=subplot_titles,
-        vertical_spacing=0.12,
+        vertical_spacing=vertical_spacing,
+        horizontal_spacing=0.08,
     )
 
     legend_added = {"pre": False, "post": False}
     for i, (state, from_mech, to_mech, switch_year) in enumerate(switchers):
-        make_subplot_panel(fig, i + 1, 1, state, switch_year, annual,
+        row = i // ncols + 1
+        col = i % ncols + 1
+        make_subplot_panel(fig, row, col, state, switch_year, annual,
                            all_results[(state, switch_year)], legend_added)
 
     fig.update_layout(
         title=(
             group["title"] +
-            "<br><sup>Overall year trend removed; dotted horizontal = period mean; "
-            "negative = more ideological</sup>"
+            "<br><sup>Dotted horizontal = period mean; negative = more ideological</sup>"
         ),
-        height=300 * nrows,
-        width=500,
+        height=row_height * nrows,
+        width=800,
         plot_bgcolor="white",
         paper_bgcolor="white",
         font=dict(family="Arial", size=10),
-        legend=dict(orientation="h", y=-0.06, x=0.5, xanchor="center"),
+        legend=dict(orientation="h", y=-0.04, x=0.5, xanchor="center"),
     )
     fig.update_xaxes(showline=True, linewidth=0.5, linecolor="black",
                      mirror=False, showgrid=False, ticks="outside")
     fig.update_yaxes(showline=True, linewidth=0.5, linecolor="black",
                      mirror=False, showgrid=False, ticks="outside",
-                     title_text="Detrended rhetoric score")
+                     title_text="Rhetoric score")
 
     out_path = FIGURES_DIR / group["filename"]
     fig.write_image(out_path, scale=3)
@@ -298,16 +292,11 @@ def main():
     rhetoric["year"] = rhetoric["year"].astype(int)
     rhetoric = rhetoric[rhetoric["year"] <= 2019]
 
-    trend_model = smf.ols("rhetoric_score ~ year", data=rhetoric).fit()
-    rhetoric["rhetoric_detrended"] = trend_model.resid
-    print(f"Overall trend: β={trend_model.params['year']:.4f}, "
-          f"p={trend_model.pvalues['year']:.6f}\n")
-
     annual = (
-        rhetoric.groupby(["court", "year"])["rhetoric_detrended"]
+        rhetoric.groupby(["court", "year"])["rhetoric_score"]
         .mean()
         .reset_index()
-        .rename(columns={"rhetoric_detrended": "mean_detrended"})
+        .rename(columns={"rhetoric_score": "mean"})
     )
 
     # Print results table
@@ -330,7 +319,7 @@ def main():
     # Sign test summary by destination mechanism
     print("\n--- Summary by destination mechanism ---")
     df_full = pd.DataFrame(list(all_results.values()))
-    for to_mech, label in [("R", "→Retention"), ("N", "→Nonpartisan Elections"), ("P", "→Partisan Elections")]:
+    for to_mech, label in [("R", "→ Retention"), ("N", "→ Nonpartisan"), ("P", "→ Partisan")]:
         subset = df_full[df_full["_to"] == to_mech]
         if subset.empty:
             continue
