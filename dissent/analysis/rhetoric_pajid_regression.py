@@ -1,15 +1,15 @@
 '''
 rhetoric_pajid_regression.py
 
-Mediation analysis testing whether ideological spread mediates the effect
+Mediation analysis testing whether discrepant spread mediates the effect
 of selection mechanisms on rhetoric scores.
 
 Theory: Partisan elections -> court homogeneity -> conventional rhetoric
 
 Three steps:
-  Step 1: Does selection mechanism predict ideological spread?
+  Step 1: Does selection mechanism predict discrepant spread?
           (Does the mechanism cause homogeneity?)
-  Step 2: Does ideological spread predict rhetoric?
+  Step 2: Does discrepant spread predict rhetoric?
           (Does homogeneity cause conventional rhetoric?)
   Step 3: Does mechanism effect on rhetoric shrink when spread is added?
           (Is spread mediating the relationship?)
@@ -89,16 +89,16 @@ def main():
     print(f"Years: {df['year'].min()}-{df['year'].max()}")
 
     # =========================================================================
-    # STEP 1: Does selection mechanism predict ideological spread?
+    # STEP 1: Does selection mechanism predict discrepant spread?
     #
     # This tests the first link in the causal chain: do different selection
-    # systems produce courts with different levels of ideological diversity?
+    # systems produce courts with different levels of discrepant diversity?
     # The outcome is pajid_spread (max - min PAJID score per court-year).
     # If partisan elections produce homogenous courts, we expect a significant
     # negative coefficient on partisan elections relative to nonpartisan.
     # =========================================================================
     print("\n" + "="*70)
-    print("STEP 1: Does mechanism predict ideological spread?")
+    print("STEP 1: Does mechanism predict discrepant spread?")
     print("Outcome: pajid_spread (max - min PAJID per court-year)")
     print("Simple OLS, SEs clustered by state")
     print("Reference category: Nonpartisan Elections (N)")
@@ -120,16 +120,16 @@ def main():
     print(f"N = {int(m1.nobs)}, R2 = {m1.rsquared:.4f}")
 
     # =========================================================================
-    # STEP 2: Does ideological spread predict rhetoric?
+    # STEP 2: Does discrepant spread predict rhetoric?
     #
-    # This tests the second link: do more ideologically diverse courts write
-    # more ideologically in their dissents? The outcome is mean rhetoric score.
+    # This tests the second link: do more discrepantly diverse courts write
+    # more discrepantly in their dissents? The outcome is mean rhetoric score.
     # Mechanism dummies are included as controls so we are not confounding
     # spread with the mechanism effect. If spread predicts rhetoric after
     # controlling for mechanism, it is doing independent work.
     # =========================================================================
     print("\n" + "="*70)
-    print("STEP 2: Does ideological spread predict rhetoric?")
+    print("STEP 2: Does discrepant spread predict rhetoric?")
     print("Outcome: mean rhetoric score")
     print("Simple OLS controlling for mechanism, SEs clustered by state")
     print("="*70)

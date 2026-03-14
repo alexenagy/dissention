@@ -12,8 +12,8 @@ model = Word2Vec.load(str(model_path))
 @app.command()
 def main():
     seed_word_files = [
-        INTERIM_DATA_DIR / "ideological_seed_words.txt",
-        INTERIM_DATA_DIR / "nonideological_seed_words.txt"
+        INTERIM_DATA_DIR / "discrepant_seed_words.txt",
+        INTERIM_DATA_DIR / "concordant_seed_words.txt"
     ]
 
     # Store expanded words for each dictionary
@@ -21,10 +21,10 @@ def main():
 
     # Step 1: Expand each dictionary
     for f in seed_word_files:
-        if "nonideological" in f.name:
-            dict_key = "nonideological"
-        elif "ideological" in f.name:
-            dict_key = "ideological"
+        if "concordant" in f.name:
+            dict_key = "concordant"
+        elif "discrepant" in f.name:
+            dict_key = "discrepant"
         else:
             raise ValueError(f"Unexpected filename: {f.name}")
 
@@ -51,13 +51,13 @@ def main():
 
         print(f"{dict_key}: {len(seed_words)} seed words expanded to {len(all_words)} total words")
 
-    # Step 2: Remove overlap between ideological and nonideological
-    ideological = all_dictionaries["ideological"]
-    nonideological = all_dictionaries["nonideological"]
-    overlap = ideological & nonideological
+    # Step 2: Remove overlap between discrepant and concordant
+    discrepant = all_dictionaries["discrepant"]
+    concordant = all_dictionaries["concordant"]
+    overlap = discrepant & concordant
 
-    all_dictionaries["ideological"] = ideological - overlap
-    all_dictionaries["nonideological"] = nonideological - overlap
+    all_dictionaries["discrepant"] = discrepant - overlap
+    all_dictionaries["concordant"] = concordant - overlap
 
     print(f"Removed {len(overlap)} overlapping words")
 

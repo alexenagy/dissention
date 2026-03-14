@@ -27,8 +27,8 @@ Two contrast models are estimated:
 
 Controls for state FE and year in both models.
 
-Negative scores = more ideological
-Positive scores = more conventional
+Negative scores = more discrepant
+Positive scores = more concordant
 Sample restricted to 1965-2019 for consistent court coverage.
 '''
 

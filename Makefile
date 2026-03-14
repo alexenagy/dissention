@@ -83,7 +83,7 @@ pipeline:
 	@echo "Step 4: Generate Wordscores seed words"
 	$(MAKE) wordscores
 	@echo "Step 5: Manually review data/interim/wordscores_vocabulary.csv"
-	@echo "        Edit data/interim/ideological_seed_words.txt and data/interim/nonideological_seed_words.txt"
+	@echo "        Edit data/interim/discrepant_seed_words.txt and data/interim/concordant_seed_words.txt"
 	@echo "        Then run: make expand"
 	@echo "Step 6: Calculate rhetoric scores"
 	@echo "        Run: make rhetoric"

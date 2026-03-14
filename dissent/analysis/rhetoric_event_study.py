@@ -11,8 +11,8 @@ to where the state started.
 
 Output: one PNG per transition-pair group, with panels in rows of three.
 
-Negative scores = more ideological language
-Positive scores = more neutral language
+Negative scores = more discrepant language
+Positive scores = more concordant language
 '''
 
 import math
@@ -262,7 +262,7 @@ def save_group_figure(group, all_results, annual):
     fig.update_layout(
         title=(
             group["title"] +
-            "<br><sup>Dotted horizontal = period mean; negative = more ideological</sup>"
+            "<br><sup>Dotted horizontal = period mean; negative = more discrepant</sup>"
         ),
         height=row_height * nrows,
         width=800,

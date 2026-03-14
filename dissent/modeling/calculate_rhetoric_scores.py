@@ -15,10 +15,10 @@ app = typer.Typer()
 model_path = MODELS_DIR / "iteration_0009/word2vec_checkpoint_00031.model"
 
 model = None
-ideological_vectors = None
-nonideological_vectors = None
-ideological_mean = None
-nonideological_mean = None
+discrepant_vectors = None
+concordant_vectors = None
+discrepant_mean = None
+concordant_mean = None
 nlp = None
 stop_words = None
 english_words = None
@@ -28,7 +28,7 @@ def init_worker():
     """
     Runs once per CPU core to load heavy assets into RAM.
     """
-    global model, ideological_vectors, nonideological_vectors, ideological_mean, nonideological_mean, nlp, stop_words, english_words
+    global model, discrepant_vectors, concordant_vectors, discrepant_mean, concordant_mean, nlp, stop_words, english_words
 
     # 1. Load Model
     model = Word2Vec.load(str(model_path))
@@ -51,19 +51,19 @@ def init_worker():
                         vecs.append(model.wv[word])
         return vecs
 
-    ideological_vectors = get_vectors_from_file("ideological_dictionary.txt")
-    nonideological_vectors = get_vectors_from_file("nonideological_dictionary.txt")
+    discrepant_vectors = get_vectors_from_file("discrepant_dictionary.txt")
+    concordant_vectors = get_vectors_from_file("concordant_dictionary.txt")  # concordant dictionary
 
     # Pre-compute concept vectors by averaging seed word embeddings (EMI methodology)
-    ideological_mean = np.array(ideological_vectors).mean(axis=0, keepdims=True) if ideological_vectors else None
-    nonideological_mean = np.array(nonideological_vectors).mean(axis=0, keepdims=True) if nonideological_vectors else None
+    discrepant_mean = np.array(discrepant_vectors).mean(axis=0, keepdims=True) if discrepant_vectors else None
+    concordant_mean = np.array(concordant_vectors).mean(axis=0, keepdims=True) if concordant_vectors else None
 
-    print(f"DEBUG: Loaded {len(ideological_vectors)} ideological vectors.")
-    print(f"DEBUG: Loaded {len(nonideological_vectors)} nonideological vectors.")
-    if len(ideological_vectors) == 0:
-        print("CRITICAL: No ideological dictionary words were found in the Model Vocabulary!")
-    if len(nonideological_vectors) == 0:
-        print("CRITICAL: No nonideological dictionary words were found in the Model Vocabulary!")
+    print(f"DEBUG: Loaded {len(discrepant_vectors)} discrepant vectors.")
+    print(f"DEBUG: Loaded {len(concordant_vectors)} concordant vectors.")
+    if len(discrepant_vectors) == 0:
+        print("CRITICAL: No discrepant dictionary words were found in the Model Vocabulary!")
+    if len(concordant_vectors) == 0:
+        print("CRITICAL: No concordant dictionary words were found in the Model Vocabulary!")
 
 
 def preprocess_text(text):
@@ -120,13 +120,13 @@ def process_batch(df_batch):
         # Average all token embeddings into a single document vector (EMI methodology)
         token_mean = np.array(token_vectors).mean(axis=0, keepdims=True)
 
-        ideological_score = calculate_distance(token_mean, ideological_mean)
-        nonideological_score = calculate_distance(token_mean, nonideological_mean)
+        discrepant_score = calculate_distance(token_mean, discrepant_mean)
+        concordant_score = calculate_distance(token_mean, concordant_mean)
 
-        if ideological_score is not None and nonideological_score is not None:
+        if discrepant_score is not None and concordant_score is not None:
             results.append({
                 "id": row["id"],
-                "rhetoric_score": nonideological_score - ideological_score,
+                "rhetoric_score": concordant_score - discrepant_score,
                 "token_count": len(token_vectors),
             })
 

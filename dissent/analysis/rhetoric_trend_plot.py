@@ -6,8 +6,8 @@ Analysis 1: Time-series plot of mean raw rhetoric scores by selection mechanism.
 Plots the annual mean rhetoric score for each mechanism type over time.
 No detrending is applied — this shows the raw trajectories.
 
-Negative scores = more ideological language
-Positive scores = more neutral language
+Negative scores = more discrepant language
+Positive scores = more concordant language
 '''
 
 import pandas as pd
@@ -73,7 +73,7 @@ def main():
 
     fig.update_layout(
         title="Mean Rhetoric Score by Selection Mechanism Over Time<br>"
-              "<sup>Negative = more ideological; positive = more neutral</sup>",
+              "<sup>Negative = more discrepant; positive = more neutral</sup>",
         xaxis_title="Year",
         yaxis_title="Mean rhetoric score",
         plot_bgcolor="white",

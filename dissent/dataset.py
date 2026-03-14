@@ -76,7 +76,7 @@ def load_pajid():
     Load PAJID ideology scores (Brace, Langer & Hall 2000).
     Covers all 50 state supreme courts 1970-2019.
     Returns one row per judge-year with normalized name for matching.
-    Higher PAJID = more liberal, 50 = ideological center.
+    Higher PAJID = more liberal, 50 = concordant center (discrepant scores are deviations from 50).
     """
     pajid = pd.read_csv(RAW_DATA_DIR / "ideology_data.csv")
     pajid = pajid[pajid["pajid"].notna()]
@@ -109,7 +109,7 @@ def main():
     - One row per dissent or concurrence-in-part opinion (exploded from nested opinions column)
     - One row per judge per opinion (exploded on judges)
     - pajid is NULL if justice not matched in PAJID dataset
-    - abs_pajid is the absolute deviation from 50 (ideological intensity)
+    - abs_pajid is the absolute deviation from 50 (discrepant intensity)
     - opinion_text is the text of the individual opinion (for Wordscores)
     """
     pajid = load_pajid()
