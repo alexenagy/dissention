@@ -71,7 +71,13 @@ expand:
 rhetoric:
 	sbatch scripts/calculate_rhetoric_scores.sh
 
-## Run full pipeline in order (requires SLURM jobs to complete between steps)
+## Run SCM: build SCM dataset + R synthetic control analysis
+.PHONY: scm
+scm:
+	uv run dissent/scm/dataset.py
+	Rscript scm/compute_scm.R
+
+## Run full pipeline in order (may require waiting for jobs to complete between steps)
 .PHONY: pipeline
 pipeline:
 	@echo "Step 1: Download data"

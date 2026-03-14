@@ -129,8 +129,6 @@ For a high‑level guide through this sequence, use:
 make pipeline
 ```
 
-This prints the intended order of operations and where manual steps are required. It does **not** automatically wait on HPC batch jobs; you must monitor them yourself with your scheduler’s tools (e.g. `squeue`, `qstat`, `bjobs`).
-
 ## Reproducing Figures
 
 - Run analysis scripts from the project root, e.g.:
